@@ -1,0 +1,64 @@
+services:
+  mysql:
+    image: quay.io/debezium/example-mysql:latest
+    environment:
+      - MYSQL_ROOT_PASSWORD=debezium
+      - MYSQL_USER=mysqluser
+      - MYSQL_PASSWORD=mysqlpw
+  zookeeper:
+    image: "quay.io/debezium/zookeeper:latest"
+    ports:
+      - 2181:2181
+      - 2888:2888
+      - 3888:3888
+  kafka:
+    image: quay.io/debezium/kafka:latest
+    ports:
+      - "9092:9092"
+    environment:
+      - ZOOKEEPER_CONNECT=zookeeper:2181
+    depends_on:
+      - zookeeper
+    links:
+      - zookeeper:zookeeper
+  kafka_connect:
+    image: quay.io/debezium/connect:1.9
+    environment:
+      - "BOOTSTRAP_SERVERS=kafka:9092"
+      - GROUP_ID=value
+      - CONFIG_STORAGE_TOPIC=debezium
+      - OFFSET_STORAGE_TOPIC=debezium_offset
+      - STORAGE_STATUS_TOPIC=debezium_status
+    ports:
+      - "8083:8083"
+    depends_on:
+      - mysql
+      - kafka
+      - zookeeper
+    links:
+      - mysql:mysql
+      - kafka:kafka
+      - zookeeper:zookeeper
+  kafka_connect_setup:
+    image: "curlimages/curl:latest"
+    command: 'curl -X POST -H "Accept: application/json" -H "Content-Type: application/json" --fail-with-body -d "@/etc/inventory.conf" http://kafka_connect:8083/connectors/'
+    volumes:
+      - ./debezium/inventory.conf:/etc/inventory.conf
+    depends_on:
+      - kafka_connect
+    links:
+      - kafka_connect
+    restart: "on-failure:30"
+  kafka_stream_processor:
+    build: ./cdc-processor
+    environment:
+      - KAFKA_HOST=kafka
+      - KAFKA_PORT=9092
+      - KAFKA_TOPIC=dbserver1.inventory.products
+    volumes:
+      - ./cdc-processor/log/:/opt/cdc-processor/log/
+    depends_on:
+      - kafka
+    links:
+      - kafka
+    restart: always

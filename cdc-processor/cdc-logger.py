@@ -8,30 +8,37 @@ KAFKA_PORT = os.environ["KAFKA_PORT"]
 KAFKA_TOPIC = os.environ["KAFKA_TOPIC"]
 
 def main():
-    consumer = Consumer({"bootstrap.servers": f"{KAFKA_HOST}:{KAFKA_PORT}", "group.id": "cdc-loggers"})
+    print("Starting CDC consumer")
+    consumer = Consumer({
+        "bootstrap.servers": f"{KAFKA_HOST}:{KAFKA_PORT}",
+        "group.id": "CDC-loggers",
+        "auto.offset.reset": "earliest",
+    })
     consumer.subscribe([KAFKA_TOPIC])
     
-    log_file = open("log/cdc.log", "w")
+    log_file = open("log/CDC.log", "w")
     
     try:
         while True:
-            cdc_event = consumer.poll(1.0)
+            CDC_event = consumer.poll()
             
-            if cdc_event is None:
-                print("Waiting for cdc events...")
+            if CDC_event is None:
+                print("Waiting for CDC events...")
                 continue
             
-            error = cdc_event.error()
+            error = CDC_event.error()
             if error:
-                print(f"error: {error}")
+                print(f"Error: {error}")
                 continue
-            
-            raw_key = cdc_event.key()
+                
+            print(f"Decoding CDC event: {CDC_event}")
+            raw_key = CDC_event.key()
             key = raw_key and raw_key.decode('utf-8')
 
-            value = cdc_event.value().decode('utf-8')
+            value = CDC_event.value().decode('utf-8')
             
             log = json.dumps({"key": json.loads(key), "value": json.loads(value)}, indent=2)
+            print(f"Decoded CDC event: {log}")
             print(log, file=log_file, flush=True)
             print(file=log_file, flush=True)
     finally:
